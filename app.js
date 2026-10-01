@@ -642,7 +642,7 @@ function mountGuideDetail(container, id) {
 function mountCaseBoard(container, fixedStatus) {
   let allCases = [];
   let showForm = false;
-  let filters = { caseType: 'All', dateRange: 'today', customDate: todayStr(), search: '' };
+  let filters = { caseType: 'All', dateRange: 'today', customDate: todayStr(), customMonth: todayStr().slice(0, 7), search: '' };
   let formStatusValue = fixedStatus;
   let modalCase = null; // { caseId, caseNumber, nextStatus, history }
 
@@ -816,11 +816,12 @@ function mountCaseBoard(container, fixedStatus) {
           ${CASE_TYPES.map((t) => `<option value="${escapeHtml(t)}" ${filters.caseType === t ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('')}
         </select>
         <div class="seg-group" id="date-seg">
-          ${[['today', 'Today'], ['week', 'Last 7 days'], ['month', 'This month'], ['all', 'All dates'], ['custom', 'Pick date']]
+          ${[['today', 'Today'], ['week', 'Last 7 days'], ['month', 'Month'], ['all', 'All dates'], ['custom', 'Pick date']]
             .map(([val, label]) => `<button class="seg-btn ${filters.dateRange === val ? 'active' : ''}" data-date="${val}">${label}</button>`)
             .join('')}
         </div>
         ${filters.dateRange === 'custom' ? `<input type="date" class="select-input" id="filter-custom-date" style="width:auto;" value="${filters.customDate}" />` : ''}
+        ${filters.dateRange === 'month' ? `<input type="month" class="select-input" id="filter-custom-month" style="width:auto;" value="${filters.customMonth}" />` : ''}
         <div class="filter-search">
           ${icon('search', 13)}
           <input type="text" id="filter-search-input" placeholder="Case #, name, agent..." value="${escapeHtml(filters.search)}" />
@@ -846,6 +847,13 @@ function mountCaseBoard(container, fixedStatus) {
         renderList();
       });
     }
+    const customMonthInput = document.getElementById('filter-custom-month');
+    if (customMonthInput) {
+      customMonthInput.addEventListener('change', (e) => {
+        filters.customMonth = e.target.value;
+        renderList();
+      });
+    }
     document.getElementById('filter-search-input').addEventListener('input', (e) => {
       filters.search = e.target.value;
       renderList();
@@ -862,7 +870,7 @@ function mountCaseBoard(container, fixedStatus) {
       return diffDays >= 0 && diffDays <= 7;
     }
     if (filters.dateRange === 'month') {
-      return dateStr.slice(0, 7) === today.slice(0, 7);
+      return dateStr.slice(0, 7) === filters.customMonth;
     }
     return true; // 'all'
   }
@@ -1051,7 +1059,7 @@ function mountCaseBoard(container, fixedStatus) {
 
 function mountAgentDashboard(container) {
   let allCases = [];
-  let filters = { dateRange: 'month', customDate: todayStr() };
+  let filters = { dateRange: 'month', customDate: todayStr(), customMonth: todayStr().slice(0, 7) };
 
   function dateInRange(dateStr) {
     if (!dateStr) return filters.dateRange === 'all';
@@ -1062,7 +1070,7 @@ function mountAgentDashboard(container) {
       const diffDays = (new Date(today) - new Date(dateStr)) / 86400000;
       return diffDays >= 0 && diffDays <= 7;
     }
-    if (filters.dateRange === 'month') return dateStr.slice(0, 7) === today.slice(0, 7);
+    if (filters.dateRange === 'month') return dateStr.slice(0, 7) === filters.customMonth;
     return true;
   }
 
@@ -1103,11 +1111,12 @@ function mountAgentDashboard(container) {
 
         <div class="filter-bar" style="margin-bottom:20px;">
           <div class="seg-group" id="dash-date-seg">
-            ${[['today', 'Today'], ['week', 'Last 7 days'], ['month', 'This month'], ['all', 'All time'], ['custom', 'Pick date']]
+            ${[['today', 'Today'], ['week', 'Last 7 days'], ['month', 'Month'], ['all', 'All time'], ['custom', 'Pick date']]
               .map(([val, label]) => `<button class="seg-btn ${filters.dateRange === val ? 'active' : ''}" data-date="${val}">${label}</button>`)
               .join('')}
           </div>
           ${filters.dateRange === 'custom' ? `<input type="date" class="select-input" id="dash-custom-date" style="width:auto;" value="${filters.customDate}" />` : ''}
+          ${filters.dateRange === 'month' ? `<input type="month" class="select-input" id="dash-custom-month" style="width:auto;" value="${filters.customMonth}" />` : ''}
         </div>
 
         <div class="stat-strip" style="margin-bottom:28px;">
@@ -1159,6 +1168,13 @@ function mountAgentDashboard(container) {
     if (customInput) {
       customInput.addEventListener('change', (e) => {
         filters.customDate = e.target.value;
+        render();
+      });
+    }
+    const customMonthInput = document.getElementById('dash-custom-month');
+    if (customMonthInput) {
+      customMonthInput.addEventListener('change', (e) => {
+        filters.customMonth = e.target.value;
         render();
       });
     }

@@ -34,6 +34,10 @@ firebase deploy
 
 ## What's inside
 
+> **Design note:** the whole site has a clean, light, professional look now
+> (white cards, indigo accent, soft shadows) instead of the earlier dark
+> theme. Everything below still works the same way.
+
 - **All Guides** — all 24 procedures from the training workbook (Log Pull
   Steps, JIRA Ticket Creation, Malformed Batch, XPI Patch, C18 Reload, etc.),
   grouped by category in the sidebar, each with its original screenshots
@@ -61,15 +65,17 @@ firebase deploy
   shows up in Done automatically — no manual moving required. Each has its
   own badge count in the sidebar.
 - **Case types** are now: DF Commander, DF POS, Double 00, Log Pull, Patch
-  Blue Screen, Lag Patch, NCR Patch, Secure User Patch. To change this list,
-  edit the `CASE_TYPES` array near the top of `case-service.js`.
+  Blue Screen, Lag Patch, NCR Patch, Secure User Patch, Bluescreen Patch,
+  Other Patches, XPI Patches. To change this list, edit the `CASE_TYPES`
+  array near the top of `case-service.js`.
 - **Date for Entry** and **Date it was Done** are both editable right in the
   Log a Case form — handy for backdating cases you forgot to log in real
   time. The same goes for the Mark Done / Mark Pending confirmation popup,
   which also asks for the effective date.
-- **Filters** now include a **This month** option alongside Today / Last 7
-  days / All dates / Pick a date. Pending cases filter by entry date; Done
-  cases filter by the date they were completed.
+- **Filters** now include **Today / Last 7 days / Month / All dates / Pick
+  date**. "Month" lets you pick *any* month (not just the current one) via a
+  month picker. Pending cases filter by entry date; Done cases filter by the
+  date they were completed.
 - **Agent Dashboard** — a new page showing how many cases each agent has
   logged and completed for a chosen period (today / week / month / all time
   / a specific date), with a relative-activity bar per agent.
