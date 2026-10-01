@@ -53,6 +53,26 @@ firebase deploy
   commands/code (monospace styling), reorder or delete lines, replace or add
   screenshots, and reset back to the original workbook content at any time.
   Edits save to your browser automatically (`localStorage`).
+
+### Case board
+
+- **Pending Cases** and **Done Cases** are now two separate sidebar
+  sections. The moment a case is marked Done, it disappears from Pending and
+  shows up in Done automatically — no manual moving required. Each has its
+  own badge count in the sidebar.
+- **Case types** are now: DF Commander, DF POS, Double 00, Log Pull, Patch
+  Blue Screen, Lag Patch, NCR Patch, Secure User Patch. To change this list,
+  edit the `CASE_TYPES` array near the top of `case-service.js`.
+- **Date for Entry** and **Date it was Done** are both editable right in the
+  Log a Case form — handy for backdating cases you forgot to log in real
+  time. The same goes for the Mark Done / Mark Pending confirmation popup,
+  which also asks for the effective date.
+- **Filters** now include a **This month** option alongside Today / Last 7
+  days / All dates / Pick a date. Pending cases filter by entry date; Done
+  cases filter by the date they were completed.
+- **Agent Dashboard** — a new page showing how many cases each agent has
+  logged and completed for a chosen period (today / week / month / all time
+  / a specific date), with a relative-activity bar per agent.
 - **Pending Case Board** (the "Pending Case Board" link in the sidebar) — log
   a case with its type (Log Pull, DF, Patch, Malformed Batch, 0 Byte
   BatchClose/Config, JIRA Ticket, or a custom type), case number, callback

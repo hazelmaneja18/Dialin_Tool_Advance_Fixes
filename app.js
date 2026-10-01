@@ -31,6 +31,7 @@ function fmtDateHeading(dateStr) {
 
 let latestGuides = [];
 let latestPendingCount = 0;
+let latestDoneCount = 0;
 let globalSearchQuery = '';
 let activeGuidesRerender = null; // set by whichever page cares about guide updates
 let currentCleanup = null; // cleanup fn for whatever page is currently mounted
@@ -105,16 +106,25 @@ function renderSidebarNav() {
     categories.get(g.category).push(g);
   });
 
-  const casesActive = hash === '#/cases';
+  const pendingActive = hash === '#/cases' || hash === '#/cases/pending';
+  const doneActive = hash === '#/cases/done';
+  const dashboardActive = hash === '#/cases/dashboard';
   const allActive = hash === '#/' || hash === '#' || hash === '';
   const completionActive = hash === '#/completion';
 
   let html = `
-    <a href="#/cases" class="nav-link ${casesActive ? 'active' : ''}">
-      <span class="icon-row">${icon('clipboard-list', 16)} Pending Case Board</span>
+    <a href="#/cases/pending" class="nav-link ${pendingActive ? 'active' : ''}">
+      <span class="icon-row">${icon('clipboard-list', 16)} Pending Cases</span>
       ${latestPendingCount > 0 ? `<span class="pending-badge">${latestPendingCount}</span>` : ''}
     </a>
-    <a href="#/completion" class="nav-link ${completionActive ? 'active' : ''}">
+    <a href="#/cases/done" class="nav-link ${doneActive ? 'active' : ''}">
+      <span class="icon-row">${icon('check-circle', 16)} Done Cases</span>
+      ${latestDoneCount > 0 ? `<span class="pending-badge pending-badge-done">${latestDoneCount}</span>` : ''}
+    </a>
+    <a href="#/cases/dashboard" class="nav-link ${dashboardActive ? 'active' : ''}">
+      <span class="icon-row">${icon('users', 16)} Agent Dashboard</span>
+    </a>
+    <a href="#/completion" class="nav-link ${completionActive ? 'active' : ''}" style="margin-bottom:12px;">
       <span class="icon-row">${icon('bar-chart', 16)} DIC Completion Rate</span>
     </a>
     <a href="#/" class="nav-link ${allActive ? 'active' : ''}">
@@ -153,7 +163,9 @@ function renderSidebarNav() {
 function parseRoute(hash) {
   hash = hash || '#/';
   if (hash === '#/' || hash === '#' || hash === '') return { name: 'landing' };
-  if (hash === '#/cases') return { name: 'cases' };
+  if (hash === '#/cases' || hash === '#/cases/pending') return { name: 'cases-pending' };
+  if (hash === '#/cases/done') return { name: 'cases-done' };
+  if (hash === '#/cases/dashboard') return { name: 'cases-dashboard' };
   if (hash === '#/new-guide') return { name: 'new-guide' };
   if (hash === '#/completion') return { name: 'completion' };
   const m = hash.match(/^#\/guides\/(.+)$/);
@@ -178,8 +190,12 @@ function onRouteChange() {
     mountGuidesLanding(page);
   } else if (route.name === 'guide') {
     mountGuideDetail(page, route.id);
-  } else if (route.name === 'cases') {
-    mountCaseTracker(page);
+  } else if (route.name === 'cases-pending') {
+    mountCaseBoard(page, 'Pending');
+  } else if (route.name === 'cases-done') {
+    mountCaseBoard(page, 'Done');
+  } else if (route.name === 'cases-dashboard') {
+    mountAgentDashboard(page);
   } else if (route.name === 'new-guide') {
     mountNewGuidePage(page);
   } else if (route.name === 'completion') {
@@ -623,27 +639,36 @@ function mountGuideDetail(container, id) {
 // Page: Pending Case Board
 // ---------------------------------------------------------------------------
 
-function mountCaseTracker(container) {
+function mountCaseBoard(container, fixedStatus) {
   let allCases = [];
   let showForm = false;
-  let filters = { status: 'Pending', caseType: 'All', dateRange: 'today', customDate: todayStr(), search: '' };
-  let statusFormValue = 'Pending';
+  let filters = { caseType: 'All', dateRange: 'today', customDate: todayStr(), search: '' };
+  let formStatusValue = fixedStatus;
   let modalCase = null; // { caseId, caseNumber, nextStatus, history }
+
+  const isPendingBoard = fixedStatus === 'Pending';
+  const nextStatus = isPendingBoard ? 'Done' : 'Pending';
+  const dateField = isPendingBoard ? 'entryDate' : 'doneDate';
+  const eyebrow = isPendingBoard ? 'DIC PENDING CASE BOARD' : 'DIC DONE CASES';
+  const heading = isPendingBoard ? 'Pending cases' : 'Completed cases';
+  const subheading = isPendingBoard
+    ? "Log any case you're working on so the team knows what's pending. Mark it Done when it's finished \u2014 every status change is signed with the agent's name."
+    : 'A record of everything the team has closed out. Mark something Pending again if it needs reopening.';
 
   container.innerHTML = `
     <div class="page wide">
       <div class="case-head">
         <div>
-          <p class="eyebrow">DIC PENDING CASE BOARD</p>
-          <h1>Log Pull &middot; DF &middot; Patch tracker</h1>
-          <p class="page-desc">Log any case you're working on so the team knows what's pending. Mark it Done when it's finished &mdash; every status change is signed with the agent's name.</p>
+          <p class="eyebrow">${eyebrow}</p>
+          <h1>${heading}</h1>
+          <p class="page-desc">${subheading}</p>
         </div>
         <button class="log-case-btn" id="toggle-form-btn">${icon('list-plus', 16)} Log a case</button>
       </div>
 
       ${!FIREBASE_ENABLED ? `
         <div class="local-mode-banner">
-          Running in local mode &mdash; cases are only saved on this device/browser. Add your Firebase config in <code>firebase-config.js</code> to sync and save cases for the whole team.
+          Running in local mode \u2014 cases are only saved on this device/browser. Add your Firebase config in <code>firebase-config.js</code> to sync and save cases for the whole team.
         </div>
       ` : ''}
 
@@ -666,7 +691,8 @@ function mountCaseTracker(container) {
       slot.innerHTML = '';
       return;
     }
-    statusFormValue = 'Pending';
+    formStatusValue = fixedStatus;
+    const today = todayStr();
     slot.innerHTML = `
       <form class="case-form" id="case-form">
         <div class="form-grid">
@@ -675,10 +701,6 @@ function mountCaseTracker(container) {
             <select class="select-input" id="f-case-type">
               ${CASE_TYPES.map((t) => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('')}
             </select>
-          </div>
-          <div id="f-other-wrap" style="display:none;">
-            <label class="field-label">SPECIFY TYPE</label>
-            <input class="text-input" id="f-case-type-other" placeholder="e.g. Register Lag Patch" />
           </div>
           <div>
             <label class="field-label">CASE NUMBER</label>
@@ -693,11 +715,19 @@ function mountCaseTracker(container) {
             <input class="text-input" id="f-callback" placeholder="Number / contact name" />
           </div>
           <div>
+            <label class="field-label">DATE FOR ENTRY</label>
+            <input type="date" class="text-input" id="f-entry-date" value="${today}" />
+          </div>
+          <div>
             <label class="field-label">STATUS</label>
             <div class="status-toggle-row">
-              <button type="button" class="status-toggle pending-active" data-status="Pending" id="f-status-pending">Pending</button>
-              <button type="button" class="status-toggle" data-status="Done" id="f-status-done">Done</button>
+              <button type="button" class="status-toggle ${formStatusValue === 'Pending' ? 'pending-active' : ''}" data-status="Pending" id="f-status-pending">Pending</button>
+              <button type="button" class="status-toggle ${formStatusValue === 'Done' ? 'done-active' : ''}" data-status="Done" id="f-status-done">Done</button>
             </div>
+          </div>
+          <div id="f-done-date-wrap" style="display:${formStatusValue === 'Done' ? 'block' : 'none'};">
+            <label class="field-label">DATE IT WAS DONE</label>
+            <input type="date" class="text-input" id="f-done-date" value="${today}" />
           </div>
         </div>
         <div class="editor-field">
@@ -716,22 +746,21 @@ function mountCaseTracker(container) {
     `;
 
     const caseTypeSelect = document.getElementById('f-case-type');
-    const otherWrap = document.getElementById('f-other-wrap');
-    caseTypeSelect.addEventListener('change', () => {
-      otherWrap.style.display = caseTypeSelect.value === 'Other' ? 'block' : 'none';
-    });
+    const doneDateWrap = document.getElementById('f-done-date-wrap');
 
     const pendingBtn = document.getElementById('f-status-pending');
     const doneBtn = document.getElementById('f-status-done');
     pendingBtn.addEventListener('click', () => {
-      statusFormValue = 'Pending';
+      formStatusValue = 'Pending';
       pendingBtn.classList.add('pending-active');
       doneBtn.classList.remove('done-active');
+      doneDateWrap.style.display = 'none';
     });
     doneBtn.addEventListener('click', () => {
-      statusFormValue = 'Done';
+      formStatusValue = 'Done';
       doneBtn.classList.add('done-active');
       pendingBtn.classList.remove('pending-active');
+      doneDateWrap.style.display = 'block';
     });
 
     document.getElementById('case-form').addEventListener('submit', async (e) => {
@@ -740,30 +769,26 @@ function mountCaseTracker(container) {
       errorEl.style.display = 'none';
 
       const caseType = caseTypeSelect.value;
-      const caseTypeOther = document.getElementById('f-case-type-other').value.trim();
       const caseNumber = document.getElementById('f-case-number').value.trim();
       const name = document.getElementById('f-name').value.trim();
       const callbackInfo = document.getElementById('f-callback').value.trim();
       const notes = document.getElementById('f-notes').value.trim();
       const agent = document.getElementById('f-agent').value.trim();
+      const entryDate = document.getElementById('f-entry-date').value || today;
+      const doneDate = formStatusValue === 'Done' ? (document.getElementById('f-done-date').value || today) : '';
 
-      if (caseType === 'Other' && !caseTypeOther) {
-        errorEl.textContent = 'Enter a case type since you chose "Other".';
-        errorEl.style.display = 'block';
-        return;
-      }
       if (!caseNumber) {
         errorEl.textContent = 'Case number is required.';
         errorEl.style.display = 'block';
         return;
       }
       if (!agent) {
-        errorEl.textContent = 'Enter your name so the team knows who logged this case.';
+        errorEl.textContent = "Enter your name so the team knows who logged this case.";
         errorEl.style.display = 'block';
         return;
       }
 
-      await addCase({ caseType, caseTypeOther, caseNumber, callbackInfo, name, status: statusFormValue, agent, notes });
+      await addCase({ caseType, caseNumber, callbackInfo, name, status: formStatusValue, agent, notes, entryDate, doneDate });
       showForm = false;
       renderForm();
     });
@@ -771,10 +796,14 @@ function mountCaseTracker(container) {
 
   function renderZeroPendingBanner() {
     const slot = document.getElementById('zero-pending-slot');
+    if (!isPendingBoard) {
+      slot.innerHTML = '';
+      return;
+    }
     const pendingTotal = allCases.filter((c) => c.status === 'Pending').length;
     slot.innerHTML =
       pendingTotal === 0
-        ? `<div class="zero-pending-banner">${icon('check-circle', 18)} No pending cases right now &mdash; board is clear.</div>`
+        ? `<div class="zero-pending-banner">${icon('check-circle', 18)} No pending cases right now \u2014 board is clear.</div>`
         : '';
   }
 
@@ -782,15 +811,12 @@ function mountCaseTracker(container) {
     const slot = document.getElementById('case-filters-slot');
     slot.innerHTML = `
       <div class="filter-bar">
-        <div class="seg-group" id="status-seg">
-          ${['All', 'Pending', 'Done'].map((s) => `<button class="seg-btn ${filters.status === s ? 'active' : ''}" data-status="${s}">${s}</button>`).join('')}
-        </div>
         <select class="select-input" id="filter-case-type" style="width:auto;">
           <option value="All">All case types</option>
           ${CASE_TYPES.map((t) => `<option value="${escapeHtml(t)}" ${filters.caseType === t ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('')}
         </select>
         <div class="seg-group" id="date-seg">
-          ${[['today', 'Today'], ['week', 'Last 7 days'], ['all', 'All dates'], ['custom', 'Pick date']]
+          ${[['today', 'Today'], ['week', 'Last 7 days'], ['month', 'This month'], ['all', 'All dates'], ['custom', 'Pick date']]
             .map(([val, label]) => `<button class="seg-btn ${filters.dateRange === val ? 'active' : ''}" data-date="${val}">${label}</button>`)
             .join('')}
         </div>
@@ -802,13 +828,6 @@ function mountCaseTracker(container) {
       </div>
     `;
 
-    slot.querySelectorAll('#status-seg .seg-btn').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        filters.status = btn.getAttribute('data-status');
-        renderFilters();
-        renderList();
-      });
-    });
     document.getElementById('filter-case-type').addEventListener('change', (e) => {
       filters.caseType = e.target.value;
       renderList();
@@ -833,20 +852,26 @@ function mountCaseTracker(container) {
     });
   }
 
+  function dateInRange(dateStr) {
+    if (!dateStr) return filters.dateRange === 'all';
+    const today = todayStr();
+    if (filters.dateRange === 'today') return dateStr === today;
+    if (filters.dateRange === 'custom') return dateStr === filters.customDate;
+    if (filters.dateRange === 'week') {
+      const diffDays = (new Date(today) - new Date(dateStr)) / 86400000;
+      return diffDays >= 0 && diffDays <= 7;
+    }
+    if (filters.dateRange === 'month') {
+      return dateStr.slice(0, 7) === today.slice(0, 7);
+    }
+    return true; // 'all'
+  }
+
   function getFiltered() {
     return allCases.filter((c) => {
-      if (filters.status !== 'All' && c.status !== filters.status) return false;
+      if (c.status !== fixedStatus) return false;
       if (filters.caseType !== 'All' && c.caseType !== filters.caseType) return false;
-
-      const created = c.createdAt ? c.createdAt.slice(0, 10) : '';
-      if (filters.dateRange === 'today' && created !== todayStr()) return false;
-      if (filters.dateRange === 'custom' && created !== filters.customDate) return false;
-      if (filters.dateRange === 'week') {
-        const d = new Date(c.createdAt);
-        const now = new Date();
-        const diffDays = (now - d) / (1000 * 60 * 60 * 24);
-        if (diffDays > 7 || diffDays < 0) return false;
-      }
+      if (!dateInRange(c[dateField])) return false;
 
       if (filters.search.trim()) {
         const q = filters.search.trim().toLowerCase();
@@ -868,18 +893,17 @@ function mountCaseTracker(container) {
 
     const grouped = new Map();
     filtered.forEach((c) => {
-      const day = c.createdAt ? c.createdAt.slice(0, 10) : 'unknown';
+      const day = c[dateField] || 'unknown';
       if (!grouped.has(day)) grouped.set(day, []);
       grouped.get(day).push(c);
     });
     const days = Array.from(grouped.keys()).sort((a, b) => (a < b ? 1 : -1));
 
-    let html = '';
+    let html = `<div class="list-summary">${filtered.length} case${filtered.length > 1 ? 's' : ''} in this view</div>`;
     days.forEach((day) => {
       const items = grouped.get(day);
-      html += `<div class="date-group"><h3>${escapeHtml(fmtDateHeading(day).toUpperCase())} &middot; ${items.length} case${items.length > 1 ? 's' : ''}</h3>`;
+      html += `<div class="date-group"><h3>${escapeHtml(fmtDateHeading(day).toUpperCase())} \u00b7 ${items.length} case${items.length > 1 ? 's' : ''}</h3>`;
       items.forEach((c) => {
-        const nextStatus = c.status === 'Pending' ? 'Done' : 'Pending';
         html += `
           <div class="case-row" data-case-id="${c.id}">
             <div class="case-row-top">
@@ -893,12 +917,13 @@ function mountCaseTracker(container) {
                   <span>${icon('hash', 12)} ${escapeHtml(c.caseNumber)}</span>
                   ${c.callbackInfo ? `<span>${icon('phone', 12)} ${escapeHtml(c.callbackInfo)}</span>` : ''}
                   <span>${icon('user', 12)} logged by ${escapeHtml(c.createdBy)}</span>
-                  <span>${icon('clock', 12)} ${new Date(c.createdAt).toLocaleString()}</span>
+                  <span>${icon('clock', 12)} entry ${escapeHtml(c.entryDate || '\u2014')}</span>
+                  ${c.status === 'Done' ? `<span>${icon('check-circle', 12)} done ${escapeHtml(c.doneDate || '\u2014')}</span>` : ''}
                 </div>
                 ${c.notes ? `<p class="case-notes">&ldquo;${escapeHtml(c.notes)}&rdquo;</p>` : ''}
               </div>
               <div class="case-row-actions">
-                <button class="mark-btn ${nextStatus === 'Done' ? 'to-done' : 'to-pending'}" data-action="open-status-modal" data-next="${nextStatus}">Mark ${nextStatus}</button>
+                <button class="mark-btn ${nextStatus === 'Done' ? 'to-done' : 'to-pending'}" data-action="open-status-modal">Mark ${nextStatus}</button>
                 <button class="icon-btn danger" data-action="delete-case" title="Delete">${icon('trash', 13)}</button>
               </div>
             </div>
@@ -910,7 +935,7 @@ function mountCaseTracker(container) {
               </button>
               <ul class="history-list" style="display:none;">
                 ${c.history
-                  .map((h) => `<li>${new Date(h.timestamp).toLocaleString()} &mdash; ${escapeHtml(h.status)} by ${escapeHtml(h.agent)}${h.note ? ` (${escapeHtml(h.note)})` : ''}</li>`)
+                  .map((h) => `<li>${escapeHtml(h.date || h.timestamp.slice(0, 10))} \u2014 ${escapeHtml(h.status)} by ${escapeHtml(h.agent)}${h.note ? ` (${escapeHtml(h.note)})` : ''}</li>`)
                   .join('')}
               </ul>
             `
@@ -940,7 +965,7 @@ function mountCaseTracker(container) {
 
       const markBtn = row.querySelector('[data-action="open-status-modal"]');
       markBtn.addEventListener('click', () => {
-        modalCase = { caseId, caseNumber: c.caseNumber, nextStatus: markBtn.getAttribute('data-next'), history: c.history };
+        modalCase = { caseId, caseNumber: c.caseNumber, nextStatus, history: c.history };
         renderModal();
       });
 
@@ -956,6 +981,7 @@ function mountCaseTracker(container) {
       slot.innerHTML = '';
       return;
     }
+    const today = todayStr();
     slot.innerHTML = `
       <div class="modal-overlay" id="modal-overlay">
         <div class="modal-box">
@@ -965,6 +991,8 @@ function mountCaseTracker(container) {
           </div>
           <label class="field-label accent">YOUR NAME</label>
           <input class="text-input" id="modal-agent" placeholder="Who's making this update?" style="margin-bottom:12px;" autofocus />
+          <label class="field-label">DATE ${modalCase.nextStatus === 'Done' ? 'COMPLETED' : 'REOPENED'}</label>
+          <input type="date" class="text-input" id="modal-date" value="${today}" style="margin-bottom:12px;" />
           <label class="field-label">NOTE (OPTIONAL)</label>
           <input class="text-input" id="modal-note" placeholder="Any context for this update?" style="margin-bottom:12px;" />
           <p class="form-error" id="modal-error" style="display:none;"></p>
@@ -988,13 +1016,14 @@ function mountCaseTracker(container) {
     document.getElementById('modal-confirm').addEventListener('click', async () => {
       const agent = document.getElementById('modal-agent').value.trim();
       const note = document.getElementById('modal-note').value.trim();
+      const date = document.getElementById('modal-date').value || today;
       if (!agent) {
         const err = document.getElementById('modal-error');
         err.textContent = 'Enter your name to confirm this update.';
         err.style.display = 'block';
         return;
       }
-      await updateCaseStatus(modalCase.caseId, modalCase.history, { status: modalCase.nextStatus, agent, note });
+      await updateCaseStatus(modalCase.caseId, modalCase.history, { status: modalCase.nextStatus, agent, note, date });
       close();
     });
   }
@@ -1010,6 +1039,135 @@ function mountCaseTracker(container) {
   renderZeroPendingBanner();
   renderList();
   renderModal();
+
+  currentCleanup = () => {
+    unsub();
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Page: Agent Dashboard (how many dialins each agent has handled)
+// ---------------------------------------------------------------------------
+
+function mountAgentDashboard(container) {
+  let allCases = [];
+  let filters = { dateRange: 'month', customDate: todayStr() };
+
+  function dateInRange(dateStr) {
+    if (!dateStr) return filters.dateRange === 'all';
+    const today = todayStr();
+    if (filters.dateRange === 'today') return dateStr === today;
+    if (filters.dateRange === 'custom') return dateStr === filters.customDate;
+    if (filters.dateRange === 'week') {
+      const diffDays = (new Date(today) - new Date(dateStr)) / 86400000;
+      return diffDays >= 0 && diffDays <= 7;
+    }
+    if (filters.dateRange === 'month') return dateStr.slice(0, 7) === today.slice(0, 7);
+    return true;
+  }
+
+  function render() {
+    const stats = new Map(); // name -> { logged, completed, pending }
+    function bump(name, field) {
+      if (!name) return;
+      if (!stats.has(name)) stats.set(name, { logged: 0, completed: 0, pending: 0 });
+      stats.get(name)[field] += 1;
+    }
+
+    allCases.forEach((c) => {
+      if (dateInRange(c.entryDate)) {
+        bump(c.createdBy, 'logged');
+        if (c.status === 'Pending') bump(c.createdBy, 'pending');
+      }
+      if (c.status === 'Done' && dateInRange(c.doneDate)) {
+        bump(c.lastTouchedBy || c.createdBy, 'completed');
+      }
+    });
+
+    const rows = Array.from(stats.entries())
+      .map(([name, s]) => Object.assign({ name }, s))
+      .sort((a, b) => b.logged + b.completed - (a.logged + a.completed));
+
+    const totalLogged = rows.reduce((sum, r) => sum + r.logged, 0);
+    const totalCompleted = rows.reduce((sum, r) => sum + r.completed, 0);
+
+    container.innerHTML = `
+      <div class="page wide">
+        <div class="case-head" style="margin-bottom:20px;">
+          <div>
+            <p class="eyebrow">TEAM ACTIVITY</p>
+            <h1>Agent Dashboard</h1>
+            <p class="page-desc">How many dialins each agent has logged and completed, for the period below.</p>
+          </div>
+        </div>
+
+        <div class="filter-bar" style="margin-bottom:20px;">
+          <div class="seg-group" id="dash-date-seg">
+            ${[['today', 'Today'], ['week', 'Last 7 days'], ['month', 'This month'], ['all', 'All time'], ['custom', 'Pick date']]
+              .map(([val, label]) => `<button class="seg-btn ${filters.dateRange === val ? 'active' : ''}" data-date="${val}">${label}</button>`)
+              .join('')}
+          </div>
+          ${filters.dateRange === 'custom' ? `<input type="date" class="select-input" id="dash-custom-date" style="width:auto;" value="${filters.customDate}" />` : ''}
+        </div>
+
+        <div class="stat-strip" style="margin-bottom:28px;">
+          <div class="stat-chip"><span class="stat-num">${totalLogged}</span><span class="stat-label">Cases logged</span></div>
+          <div class="stat-chip"><span class="stat-num">${totalCompleted}</span><span class="stat-label">Cases completed</span></div>
+          <div class="stat-chip"><span class="stat-num">${rows.length}</span><span class="stat-label">Active agents</span></div>
+        </div>
+
+        ${
+          rows.length === 0
+            ? `<div class="empty-state">No activity in this period.</div>`
+            : `
+          <div class="dash-grid">
+            ${rows
+              .map((r) => {
+                const maxActivity = Math.max(...rows.map((x) => x.logged + x.completed), 1);
+                const activityPct = Math.round(((r.logged + r.completed) / maxActivity) * 100);
+                return `
+                <div class="dash-card">
+                  <div class="dash-card-head">
+                    <div class="dash-avatar">${escapeHtml((r.name || '?').slice(0, 1).toUpperCase())}</div>
+                    <div>
+                      <div class="dash-name">${escapeHtml(r.name)}</div>
+                      <div class="dash-sub">${r.pending > 0 ? `${r.pending} still pending` : 'none pending'}</div>
+                    </div>
+                  </div>
+                  <div class="dash-stats-row">
+                    <div class="dash-stat"><span class="dash-stat-num">${r.logged}</span><span class="dash-stat-label">Logged</span></div>
+                    <div class="dash-stat"><span class="dash-stat-num" style="color:var(--green);">${r.completed}</span><span class="dash-stat-label">Completed</span></div>
+                  </div>
+                  <div class="matrix-bar" style="margin-top:10px;"><div class="matrix-bar-fill matrix-bar-good" style="width:${activityPct}%"></div></div>
+                </div>
+              `;
+              })
+              .join('')}
+          </div>
+        `
+        }
+      </div>
+    `;
+
+    container.querySelectorAll('#dash-date-seg .seg-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        filters.dateRange = btn.getAttribute('data-date');
+        render();
+      });
+    });
+    const customInput = document.getElementById('dash-custom-date');
+    if (customInput) {
+      customInput.addEventListener('change', (e) => {
+        filters.customDate = e.target.value;
+        render();
+      });
+    }
+  }
+
+  const unsub = subscribeCases((cases) => {
+    allCases = cases;
+    render();
+  });
 
   currentCleanup = () => {
     unsub();
@@ -1181,6 +1339,7 @@ subscribeGuides((guides) => {
 });
 subscribeCases((cases) => {
   latestPendingCount = cases.filter((c) => c.status === 'Pending').length;
+  latestDoneCount = cases.filter((c) => c.status === 'Done').length;
   renderSidebarNav();
 });
 window.addEventListener('hashchange', onRouteChange);
