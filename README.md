@@ -34,11 +34,10 @@ firebase deploy
 
 ## What's inside
 
-> **Design note:** the site uses a navy/blue/cyan palette with a cream
-> accent now. The sidebar is deep navy with a glowing title and a pulsing
-> brand icon, nav links are grouped under "Case Board" and "Training"
-> section labels, and primary buttons glow cyan on hover. Everything below
-> still works the same way.
+> **Design note:** the site uses a rich navy/royal-blue palette now — a
+> near-black navy sidebar, a vivid royal blue for buttons and active states,
+> and soft periwinkle/sky-blue tints for backgrounds. No glow effects.
+> Everything below still works the same way.
 
 - **All Guides** — all 24 procedures from the training workbook (Log Pull
   Steps, JIRA Ticket Creation, Malformed Batch, XPI Patch, C18 Reload, etc.),

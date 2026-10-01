@@ -31,7 +31,6 @@ function fmtDateHeading(dateStr) {
 
 let latestGuides = [];
 let latestPendingCount = 0;
-let latestDoneCount = 0;
 let globalSearchQuery = '';
 let activeGuidesRerender = null; // set by whichever page cares about guide updates
 let currentCleanup = null; // cleanup fn for whatever page is currently mounted
@@ -120,7 +119,6 @@ function renderSidebarNav() {
     </a>
     <a href="#/cases/done" class="nav-link ${doneActive ? 'active' : ''}">
       <span class="icon-row">${icon('check-circle', 16)} Done Cases</span>
-      ${latestDoneCount > 0 ? `<span class="pending-badge pending-badge-done">${latestDoneCount}</span>` : ''}
     </a>
     <a href="#/cases/dashboard" class="nav-link ${dashboardActive ? 'active' : ''}" style="margin-bottom:12px;">
       <span class="icon-row">${icon('users', 16)} Agent Dashboard</span>
@@ -1358,7 +1356,6 @@ subscribeGuides((guides) => {
 });
 subscribeCases((cases) => {
   latestPendingCount = cases.filter((c) => c.status === 'Pending').length;
-  latestDoneCount = cases.filter((c) => c.status === 'Done').length;
   renderSidebarNav();
 });
 window.addEventListener('hashchange', onRouteChange);
