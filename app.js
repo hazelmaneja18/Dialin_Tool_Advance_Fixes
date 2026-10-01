@@ -113,6 +113,7 @@ function renderSidebarNav() {
   const completionActive = hash === '#/completion';
 
   let html = `
+    <div class="nav-section-label">CASE BOARD</div>
     <a href="#/cases/pending" class="nav-link ${pendingActive ? 'active' : ''}">
       <span class="icon-row">${icon('clipboard-list', 16)} Pending Cases</span>
       ${latestPendingCount > 0 ? `<span class="pending-badge">${latestPendingCount}</span>` : ''}
@@ -121,17 +122,19 @@ function renderSidebarNav() {
       <span class="icon-row">${icon('check-circle', 16)} Done Cases</span>
       ${latestDoneCount > 0 ? `<span class="pending-badge pending-badge-done">${latestDoneCount}</span>` : ''}
     </a>
-    <a href="#/cases/dashboard" class="nav-link ${dashboardActive ? 'active' : ''}">
+    <a href="#/cases/dashboard" class="nav-link ${dashboardActive ? 'active' : ''}" style="margin-bottom:12px;">
       <span class="icon-row">${icon('users', 16)} Agent Dashboard</span>
     </a>
-    <a href="#/completion" class="nav-link ${completionActive ? 'active' : ''}" style="margin-bottom:12px;">
-      <span class="icon-row">${icon('bar-chart', 16)} DIC Completion Rate</span>
-    </a>
+
+    <div class="nav-section-label">TRAINING</div>
     <a href="#/" class="nav-link ${allActive ? 'active' : ''}">
       <span class="icon-row">${icon('layout-list', 16)} All Guides</span>
     </a>
-    <a href="#/new-guide" class="nav-link ${hash === '#/new-guide' ? 'active' : ''}" style="margin-bottom:12px;">
+    <a href="#/new-guide" class="nav-link ${hash === '#/new-guide' ? 'active' : ''}">
       <span class="icon-row">${icon('list-plus', 16)} New Guide</span>
+    </a>
+    <a href="#/completion" class="nav-link ${completionActive ? 'active' : ''}" style="margin-bottom:12px;">
+      <span class="icon-row">${icon('bar-chart', 16)} DIC Completion Rate</span>
     </a>
     <div class="nav-divider"></div>
   `;
