@@ -6,14 +6,16 @@ const CASE_LOCAL_KEY = 'dic_pending_cases_v1';
 const caseBus = new EventTarget();
 
 const CASE_TYPES = [
+  'Blue Screen Patch',
   'DF Commander',
   'DF POS',
   'Double 00',
   'Log Pull',
-  'Patch Blue Screen',
   'Lag Patch',
   'NCR Patch',
+  'OTHER PATCHES'
   'Secure User Patch',
+  'XPI PATCH'
 ];
 
 let firestoreDb = null;
