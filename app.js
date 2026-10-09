@@ -1,8 +1,9 @@
 /* global GUIDES_DEFAULT, CASE_TYPES, icon, getGuides, getGuide, saveGuide, resetGuide,
    createGuide, deleteGuide, subscribeGuides, subscribeCases, addCase, updateCaseStatus,
-   deleteCase, FIREBASE_ENABLED, getCompletion, subscribeCompletion, addCompletionAgent,
-   renameCompletionAgent, removeCompletionAgent, addCompletionTask, renameCompletionTask,
-   removeCompletionTask, toggleCompletionStatus, agentProgress */
+   addCaseUpdate, updateCaseFields, deleteCase, FIREBASE_ENABLED, getCompletion,
+   subscribeCompletion, addCompletionAgent, renameCompletionAgent, removeCompletionAgent,
+   addCompletionTask, renameCompletionTask, removeCompletionTask, toggleCompletionStatus,
+   agentProgress */
 
 // ---------------------------------------------------------------------------
 // Small helpers
@@ -646,6 +647,8 @@ function mountCaseBoard(container, fixedStatus) {
   let filters = { caseType: 'All', dateRange: 'today', customDate: todayStr(), customMonth: todayStr().slice(0, 7), search: '' };
   let formStatusValue = fixedStatus;
   let modalCase = null; // { caseId, caseNumber, nextStatus, history }
+  let updateModalCase = null; // { caseId, caseNumber, history }
+  let editModalCase = null; // the full case object being edited
 
   const isPendingBoard = fixedStatus === 'Pending';
   const nextStatus = isPendingBoard ? 'Done' : 'Pending';
@@ -679,6 +682,8 @@ function mountCaseBoard(container, fixedStatus) {
       <div id="case-list-slot"></div>
     </div>
     <div id="case-modal-slot"></div>
+    <div id="case-update-modal-slot"></div>
+    <div id="case-edit-modal-slot"></div>
   `;
 
   document.getElementById('toggle-form-btn').addEventListener('click', () => {
@@ -932,6 +937,8 @@ function mountCaseBoard(container, fixedStatus) {
                 ${c.notes ? `<p class="case-notes">&ldquo;${escapeHtml(c.notes)}&rdquo;</p>` : ''}
               </div>
               <div class="case-row-actions">
+                <button class="icon-btn" data-action="open-update-modal" title="Add an update">${icon('list-plus', 13)} Update</button>
+                <button class="icon-btn" data-action="open-edit-modal" title="Edit case details">${icon('pencil', 13)} Edit</button>
                 <button class="mark-btn ${nextStatus === 'Done' ? 'to-done' : 'to-pending'}" data-action="open-status-modal">Mark ${nextStatus}</button>
                 <button class="icon-btn danger" data-action="delete-case" title="Delete">${icon('trash', 13)}</button>
               </div>
@@ -944,7 +951,10 @@ function mountCaseBoard(container, fixedStatus) {
               </button>
               <ul class="history-list" style="display:none;">
                 ${c.history
-                  .map((h) => `<li>${escapeHtml(h.date || h.timestamp.slice(0, 10))} \u2014 ${escapeHtml(h.status)} by ${escapeHtml(h.agent)}${h.note ? ` (${escapeHtml(h.note)})` : ''}</li>`)
+                  .map((h) => {
+                    const label = h.kind === 'update' ? 'Update' : h.kind === 'edit' ? 'Edited' : h.status;
+                    return `<li>${escapeHtml(h.date || h.timestamp.slice(0, 10))} \u2014 ${escapeHtml(label)} by ${escapeHtml(h.agent)}${h.note ? ` (${escapeHtml(h.note)})` : ''}</li>`;
+                  })
                   .join('')}
               </ul>
             `
@@ -976,6 +986,16 @@ function mountCaseBoard(container, fixedStatus) {
       markBtn.addEventListener('click', () => {
         modalCase = { caseId, caseNumber: c.caseNumber, nextStatus, history: c.history };
         renderModal();
+      });
+
+      row.querySelector('[data-action="open-update-modal"]').addEventListener('click', () => {
+        updateModalCase = { caseId, caseNumber: c.caseNumber, history: c.history };
+        renderUpdateModal();
+      });
+
+      row.querySelector('[data-action="open-edit-modal"]').addEventListener('click', () => {
+        editModalCase = c;
+        renderEditModal();
       });
 
       row.querySelector('[data-action="delete-case"]').addEventListener('click', () => {
@@ -1037,10 +1057,170 @@ function mountCaseBoard(container, fixedStatus) {
     });
   }
 
+  function renderUpdateModal() {
+    const slot = document.getElementById('case-update-modal-slot');
+    if (!updateModalCase) {
+      slot.innerHTML = '';
+      return;
+    }
+    slot.innerHTML = `
+      <div class="modal-overlay" id="update-modal-overlay">
+        <div class="modal-box">
+          <div class="modal-head">
+            <h3>Add an update to case ${escapeHtml(updateModalCase.caseNumber)}</h3>
+            <button data-action="close-update-modal">${icon('x', 18)}</button>
+          </div>
+          <label class="field-label accent">YOUR NAME</label>
+          <input class="text-input" id="update-agent" placeholder="Who's adding this update?" style="margin-bottom:12px;" autofocus />
+          <label class="field-label">UPDATE</label>
+          <textarea class="text-area" id="update-note" rows="4" placeholder="What's the latest on this case?" style="margin-bottom:12px;"></textarea>
+          <p class="form-error" id="update-error" style="display:none;"></p>
+          <div class="modal-actions">
+            <button class="btn-secondary" data-action="close-update-modal">Cancel</button>
+            <button class="btn-primary" id="update-confirm">Save update</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const close = () => {
+      updateModalCase = null;
+      renderUpdateModal();
+    };
+    document.getElementById('update-modal-overlay').addEventListener('click', (e) => {
+      if (e.target.id === 'update-modal-overlay') close();
+    });
+    slot.querySelectorAll('[data-action="close-update-modal"]').forEach((el) => el.addEventListener('click', close));
+
+    document.getElementById('update-confirm').addEventListener('click', async () => {
+      const agent = document.getElementById('update-agent').value.trim();
+      const note = document.getElementById('update-note').value.trim();
+      const err = document.getElementById('update-error');
+      if (!agent) {
+        err.textContent = 'Enter your name so the team knows who left this update.';
+        err.style.display = 'block';
+        return;
+      }
+      if (!note) {
+        err.textContent = 'Write an update before saving.';
+        err.style.display = 'block';
+        return;
+      }
+      await addCaseUpdate(updateModalCase.caseId, updateModalCase.history, { agent, note });
+      close();
+    });
+  }
+
+  function renderEditModal() {
+    const slot = document.getElementById('case-edit-modal-slot');
+    if (!editModalCase) {
+      slot.innerHTML = '';
+      return;
+    }
+    const c = editModalCase;
+    slot.innerHTML = `
+      <div class="modal-overlay" id="edit-modal-overlay">
+        <div class="modal-box modal-box-wide">
+          <div class="modal-head">
+            <h3>Edit case ${escapeHtml(c.caseNumber)}</h3>
+            <button data-action="close-edit-modal">${icon('x', 18)}</button>
+          </div>
+
+          <div class="form-grid">
+            <div>
+              <label class="field-label">CASE TYPE</label>
+              <select class="select-input" id="edit-case-type">
+                ${CASE_TYPES.map((t) => `<option value="${escapeHtml(t)}" ${c.caseType === t ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('')}
+              </select>
+            </div>
+            <div>
+              <label class="field-label">CASE NUMBER</label>
+              <input class="text-input" id="edit-case-number" value="${escapeHtml(c.caseNumber)}" />
+            </div>
+            <div>
+              <label class="field-label">SITE / STORE NAME</label>
+              <input class="text-input" id="edit-name" value="${escapeHtml(c.name || '')}" />
+            </div>
+            <div>
+              <label class="field-label">CALLBACK INFO</label>
+              <input class="text-input" id="edit-callback" value="${escapeHtml(c.callbackInfo || '')}" />
+            </div>
+            <div>
+              <label class="field-label">DATE FOR ENTRY</label>
+              <input type="date" class="text-input" id="edit-entry-date" value="${escapeHtml(c.entryDate || '')}" />
+            </div>
+            ${
+              c.status === 'Done'
+                ? `<div>
+                <label class="field-label">DATE IT WAS DONE</label>
+                <input type="date" class="text-input" id="edit-done-date" value="${escapeHtml(c.doneDate || '')}" />
+              </div>`
+                : ''
+            }
+          </div>
+
+          <label class="field-label">NOTES</label>
+          <textarea class="text-area" id="edit-notes" rows="3" style="margin-bottom:14px;">${escapeHtml(c.notes || '')}</textarea>
+
+          <label class="field-label accent">YOUR NAME (WHO'S EDITING THIS)</label>
+          <input class="text-input" id="edit-agent" placeholder="Required to save changes" style="margin-bottom:12px;" />
+
+          <p class="form-error" id="edit-error" style="display:none;"></p>
+          <div class="modal-actions">
+            <button class="btn-secondary" data-action="close-edit-modal">Cancel</button>
+            <button class="btn-primary" id="edit-confirm">Save changes</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const close = () => {
+      editModalCase = null;
+      renderEditModal();
+    };
+    document.getElementById('edit-modal-overlay').addEventListener('click', (e) => {
+      if (e.target.id === 'edit-modal-overlay') close();
+    });
+    slot.querySelectorAll('[data-action="close-edit-modal"]').forEach((el) => el.addEventListener('click', close));
+
+    document.getElementById('edit-confirm').addEventListener('click', async () => {
+      const agent = document.getElementById('edit-agent').value.trim();
+      const err = document.getElementById('edit-error');
+      const caseNumber = document.getElementById('edit-case-number').value.trim();
+      if (!caseNumber) {
+        err.textContent = 'Case number is required.';
+        err.style.display = 'block';
+        return;
+      }
+      if (!agent) {
+        err.textContent = 'Enter your name so the team knows who edited this case.';
+        err.style.display = 'block';
+        return;
+      }
+      const doneDateEl = document.getElementById('edit-done-date');
+      const fields = {
+        caseType: document.getElementById('edit-case-type').value,
+        caseNumber,
+        name: document.getElementById('edit-name').value.trim(),
+        callbackInfo: document.getElementById('edit-callback').value.trim(),
+        entryDate: document.getElementById('edit-entry-date').value,
+        notes: document.getElementById('edit-notes').value.trim(),
+      };
+      if (doneDateEl) fields.doneDate = doneDateEl.value;
+      await updateCaseFields(c.id, c.history, fields, agent);
+      close();
+    });
+  }
+
   const unsub = subscribeCases((cases) => {
     allCases = cases;
     renderZeroPendingBanner();
     renderList();
+    // keep an open edit modal's data fresh if this case gets updated elsewhere
+    if (editModalCase) {
+      const fresh = cases.find((x) => x.id === editModalCase.id);
+      if (fresh) editModalCase = fresh;
+    }
   });
 
   renderForm();
@@ -1048,6 +1228,8 @@ function mountCaseBoard(container, fixedStatus) {
   renderZeroPendingBanner();
   renderList();
   renderModal();
+  renderUpdateModal();
+  renderEditModal();
 
   currentCleanup = () => {
     unsub();

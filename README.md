@@ -80,6 +80,14 @@ firebase deploy
 - **Agent Dashboard** — a new page showing how many cases each agent has
   logged and completed for a chosen period (today / week / month / all time
   / a specific date), with a relative-activity bar per agent.
+- **Update button** on every case (Pending or Done) — add a free-text,
+  timestamped progress note without changing the case's status. Requires
+  the name of whoever's leaving the update, same as everything else here.
+- **Edit button** on every case (Pending or Done) — correct the case type,
+  case number, site name, callback info, entry date, done date (if
+  applicable), or notes after the fact. Also requires a name, and logs an
+  "Edited" entry in that case's history so there's a record of who changed
+  what.
 - **Pending Case Board** (the "Pending Case Board" link in the sidebar) — log
   a case with its type (Log Pull, DF, Patch, Malformed Batch, 0 Byte
   BatchClose/Config, JIRA Ticket, or a custom type), case number, callback

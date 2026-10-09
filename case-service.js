@@ -150,6 +150,50 @@ async function updateCaseStatus(id, existingHistory, change) {
   writeLocalCases(cases);
 }
 
+/**
+ * Logs a free-text update on a case WITHOUT changing its status -- e.g. a
+ * progress note while it's still being worked. Saves who wrote it and when,
+ * and shows up in that case's update history alongside status changes.
+ */
+async function addCaseUpdate(id, existingHistory, { agent, note }) {
+  const now = new Date().toISOString();
+  const historyEntry = { kind: 'update', agent, timestamp: now, date: todayDateStr(), note };
+  const nextHistory = (existingHistory || []).concat([historyEntry]);
+  const extra = { updatedAt: now, lastTouchedBy: agent, history: nextHistory };
+
+  if (firestoreDb) {
+    await firestoreDb.collection('dicCases').doc(id).update(extra);
+    return;
+  }
+  const cases = readLocalCases();
+  const idx = cases.findIndex((c) => c.id === id);
+  if (idx === -1) return;
+  cases[idx] = Object.assign({}, cases[idx], extra);
+  writeLocalCases(cases);
+}
+
+/**
+ * Edits a case's core details (type, number, contact info, dates, notes).
+ * Requires the editor's name -- logged as an "edit" entry in the case's
+ * history so there's a record of who corrected what and when.
+ */
+async function updateCaseFields(id, existingHistory, fields, editorAgent) {
+  const now = new Date().toISOString();
+  const historyEntry = { kind: 'edit', agent: editorAgent, timestamp: now, date: todayDateStr(), note: 'Case details edited' };
+  const nextHistory = (existingHistory || []).concat([historyEntry]);
+  const extra = Object.assign({}, fields, { updatedAt: now, lastTouchedBy: editorAgent, history: nextHistory });
+
+  if (firestoreDb) {
+    await firestoreDb.collection('dicCases').doc(id).update(extra);
+    return;
+  }
+  const cases = readLocalCases();
+  const idx = cases.findIndex((c) => c.id === id);
+  if (idx === -1) return;
+  cases[idx] = Object.assign({}, cases[idx], extra);
+  writeLocalCases(cases);
+}
+
 async function deleteCase(id) {
   if (firestoreDb) {
     await firestoreDb.collection('dicCases').doc(id).delete();
