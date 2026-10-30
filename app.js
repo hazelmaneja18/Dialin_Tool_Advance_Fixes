@@ -3,7 +3,7 @@
    addCaseUpdate, updateCaseFields, deleteCase, FIREBASE_ENABLED, getCompletion,
    subscribeCompletion, addCompletionAgent, renameCompletionAgent, removeCompletionAgent,
    addCompletionTask, renameCompletionTask, removeCompletionTask, toggleCompletionStatus,
-   agentProgress */
+   agentProgress, getAgentDirectory, addAgentName, removeAgentName, subscribeAgentDirectory */
 
 // ---------------------------------------------------------------------------
 // Small helpers
@@ -649,6 +649,17 @@ function mountCaseBoard(container, fixedStatus) {
   let modalCase = null; // { caseId, caseNumber, nextStatus, history }
   let updateModalCase = null; // { caseId, caseNumber, history }
   let editModalCase = null; // the full case object being edited
+  let latestAgentNames = [];
+  let manageAgentsOpen = false;
+
+  function agentSelectOptions(selectedValue) {
+    const opts = ['<option value="">Select your name\u2026</option>'].concat(
+      latestAgentNames.map(
+        (n) => `<option value="${escapeHtml(n)}" ${n === selectedValue ? 'selected' : ''}>${escapeHtml(n)}</option>`
+      )
+    );
+    return opts.join('');
+  }
 
   const isPendingBoard = fixedStatus === 'Pending';
   const nextStatus = isPendingBoard ? 'Done' : 'Pending';
@@ -667,7 +678,10 @@ function mountCaseBoard(container, fixedStatus) {
           <h1>${heading}</h1>
           <p class="page-desc">${subheading}</p>
         </div>
-        <button class="log-case-btn" id="toggle-form-btn">${icon('list-plus', 16)} Log a case</button>
+        <div style="display:flex;gap:8px;flex-shrink:0;">
+          <button class="btn-secondary" id="manage-agents-btn">${icon('settings', 14)} Manage names</button>
+          <button class="log-case-btn" id="toggle-form-btn">${icon('list-plus', 16)} Log a case</button>
+        </div>
       </div>
 
       ${!FIREBASE_ENABLED ? `
@@ -684,7 +698,13 @@ function mountCaseBoard(container, fixedStatus) {
     <div id="case-modal-slot"></div>
     <div id="case-update-modal-slot"></div>
     <div id="case-edit-modal-slot"></div>
+    <div id="manage-agents-modal-slot"></div>
   `;
+
+  document.getElementById('manage-agents-btn').addEventListener('click', () => {
+    manageAgentsOpen = true;
+    renderManageAgentsModal();
+  });
 
   document.getElementById('toggle-form-btn').addEventListener('click', () => {
     showForm = !showForm;
@@ -743,7 +763,7 @@ function mountCaseBoard(container, fixedStatus) {
         <div class="form-footer">
           <div class="agent-field">
             <label class="field-label accent">YOUR NAME (AGENT LOGGING THIS)</label>
-            <input class="text-input" id="f-agent" placeholder="Who's submitting this?" />
+            <select class="select-input" id="f-agent">${agentSelectOptions('')}</select>
           </div>
           <button type="submit" class="btn-primary">${icon('send', 14)} Submit case</button>
         </div>
@@ -1019,7 +1039,7 @@ function mountCaseBoard(container, fixedStatus) {
             <button data-action="close-modal">${icon('x', 18)}</button>
           </div>
           <label class="field-label accent">YOUR NAME</label>
-          <input class="text-input" id="modal-agent" placeholder="Who's making this update?" style="margin-bottom:12px;" autofocus />
+          <select class="select-input" id="modal-agent" style="margin-bottom:12px;" autofocus>${agentSelectOptions('')}</select>
           <label class="field-label">DATE ${modalCase.nextStatus === 'Done' ? 'COMPLETED' : 'REOPENED'}</label>
           <input type="date" class="text-input" id="modal-date" value="${today}" style="margin-bottom:12px;" />
           <label class="field-label">NOTE (OPTIONAL)</label>
@@ -1071,7 +1091,7 @@ function mountCaseBoard(container, fixedStatus) {
             <button data-action="close-update-modal">${icon('x', 18)}</button>
           </div>
           <label class="field-label accent">YOUR NAME</label>
-          <input class="text-input" id="update-agent" placeholder="Who's adding this update?" style="margin-bottom:12px;" autofocus />
+          <select class="select-input" id="update-agent" style="margin-bottom:12px;" autofocus>${agentSelectOptions('')}</select>
           <label class="field-label">UPDATE</label>
           <textarea class="text-area" id="update-note" rows="4" placeholder="What's the latest on this case?" style="margin-bottom:12px;"></textarea>
           <p class="form-error" id="update-error" style="display:none;"></p>
@@ -1163,7 +1183,7 @@ function mountCaseBoard(container, fixedStatus) {
           <textarea class="text-area" id="edit-notes" rows="3" style="margin-bottom:14px;">${escapeHtml(c.notes || '')}</textarea>
 
           <label class="field-label accent">YOUR NAME (WHO'S EDITING THIS)</label>
-          <input class="text-input" id="edit-agent" placeholder="Required to save changes" style="margin-bottom:12px;" />
+          <select class="select-input" id="edit-agent" style="margin-bottom:12px;">${agentSelectOptions('')}</select>
 
           <p class="form-error" id="edit-error" style="display:none;"></p>
           <div class="modal-actions">
@@ -1212,7 +1232,79 @@ function mountCaseBoard(container, fixedStatus) {
     });
   }
 
-  const unsub = subscribeCases((cases) => {
+  function renderManageAgentsModal() {
+    const slot = document.getElementById('manage-agents-modal-slot');
+    if (!manageAgentsOpen) {
+      slot.innerHTML = '';
+      return;
+    }
+    slot.innerHTML = `
+      <div class="modal-overlay" id="manage-agents-overlay">
+        <div class="modal-box">
+          <div class="modal-head">
+            <h3>Manage names</h3>
+            <button data-action="close-manage-agents">${icon('x', 18)}</button>
+          </div>
+          <p class="page-desc" style="margin:0 0 14px;font-size:13px;">
+            Add or remove names from the dropdown used everywhere on the Case Board.
+          </p>
+          <ul class="agent-manage-list">
+            ${latestAgentNames
+              .map(
+                (n) => `
+              <li>
+                <span>${escapeHtml(n)}</span>
+                <button class="matrix-remove-btn" data-action="remove-agent-name" data-name="${escapeHtml(n)}" title="Remove">${icon('x', 13)}</button>
+              </li>
+            `
+              )
+              .join('')}
+            ${latestAgentNames.length === 0 ? '<li class="agent-manage-empty">No names yet.</li>' : ''}
+          </ul>
+          <div class="agent-manage-add">
+            <input class="text-input" id="new-agent-name" placeholder="Add a name..." />
+            <button class="btn-primary" id="add-agent-name-btn">${icon('plus', 14)} Add</button>
+          </div>
+          <div class="modal-actions">
+            <button class="btn-secondary" data-action="close-manage-agents">Done</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const close = () => {
+      manageAgentsOpen = false;
+      renderManageAgentsModal();
+    };
+    document.getElementById('manage-agents-overlay').addEventListener('click', (e) => {
+      if (e.target.id === 'manage-agents-overlay') close();
+    });
+    slot.querySelectorAll('[data-action="close-manage-agents"]').forEach((el) => el.addEventListener('click', close));
+
+    slot.querySelectorAll('[data-action="remove-agent-name"]').forEach((el) => {
+      el.addEventListener('click', () => {
+        removeAgentName(el.getAttribute('data-name'));
+      });
+    });
+
+    function submitNewName() {
+      const input = document.getElementById('new-agent-name');
+      const name = input.value.trim();
+      if (!name) return;
+      addAgentName(name);
+      input.value = '';
+      input.focus();
+    }
+    document.getElementById('add-agent-name-btn').addEventListener('click', submitNewName);
+    document.getElementById('new-agent-name').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        submitNewName();
+      }
+    });
+  }
+
+  const unsubCases = subscribeCases((cases) => {
     allCases = cases;
     renderZeroPendingBanner();
     renderList();
@@ -1223,6 +1315,16 @@ function mountCaseBoard(container, fixedStatus) {
     }
   });
 
+  const unsubAgents = subscribeAgentDirectory((names) => {
+    latestAgentNames = names;
+    // re-render whatever's currently open so its dropdown options stay current
+    if (showForm) renderForm();
+    if (modalCase) renderModal();
+    if (updateModalCase) renderUpdateModal();
+    if (editModalCase) renderEditModal();
+    if (manageAgentsOpen) renderManageAgentsModal();
+  });
+
   renderForm();
   renderFilters();
   renderZeroPendingBanner();
@@ -1230,9 +1332,11 @@ function mountCaseBoard(container, fixedStatus) {
   renderModal();
   renderUpdateModal();
   renderEditModal();
+  renderManageAgentsModal();
 
   currentCleanup = () => {
-    unsub();
+    unsubCases();
+    unsubAgents();
   };
 }
 

@@ -88,6 +88,12 @@ firebase deploy
   applicable), or notes after the fact. Also requires a name, and logs an
   "Edited" entry in that case's history so there's a record of who changed
   what.
+- **"Your name" is now a dropdown**, everywhere a name is required (logging
+  a case, marking it Done/Pending, adding an update, editing details) — no
+  more typos in names. Click **Manage names** (next to "Log a case" on
+  either board) to add or remove people; every dropdown updates instantly.
+  The starting list is in `agent-directory.js` if you ever want to change
+  the defaults directly in code instead.
 - **Pending Case Board** (the "Pending Case Board" link in the sidebar) — log
   a case with its type (Log Pull, DF, Patch, Malformed Batch, 0 Byte
   BatchClose/Config, JIRA Ticket, or a custom type), case number, callback
@@ -142,6 +148,7 @@ firebase-config.js    your Firebase project keys
 guide-service.js      guide read/write (localStorage-backed)
 case-service.js       case board read/write (Firestore or localStorage)
 completion-service.js training completion matrix (localStorage-backed)
+agent-directory.js    the "your name" dropdown list (localStorage-backed)
 icons.js              small inline icon set (no external icon library)
 app.js                all page logic and rendering
 ```
